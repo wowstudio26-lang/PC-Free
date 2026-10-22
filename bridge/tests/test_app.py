@@ -101,3 +101,35 @@ def test_interrupted_job_is_not_reported_as_downloading(monkeypatch, tmp_path):
 
     assert jobs[job_id].status == "failed"
     assert "restarted" in jobs[job_id].message.lower()
+
+
+
+def test_completed_file_can_be_downloaded_and_cancel_is_idempotent(monkeypatch, tmp_path):
+    monkeypatch.setattr(bridge_app, "DOWNLOAD_ROOT", tmp_path / "downloads")
+    monkeypatch.setattr(bridge_app, "STATE_PATH", tmp_path / "state" / "jobs.json")
+    jobs.clear()
+    job_id = "c" * 32
+    folder = bridge_app.DOWNLOAD_ROOT / job_id
+    folder.mkdir(parents=True)
+    payload = b"example payload from completed job"
+    (folder / "sample.bin").write_bytes(payload)
+    now = utc_now()
+    jobs[job_id] = Job(
+        id=job_id,
+        magnet_uri="magnet:?xt=urn:btih:0123456789012345678901234567890123456789",
+        status="complete",
+        created_at=now,
+        updated_at=now,
+        message="Download complete",
+        return_code=0,
+    )
+
+    response = client.get(f"/api/v1/jobs/{job_id}/files/sample.bin", headers=HEADERS)
+    assert response.status_code == 200
+    assert response.content == payload
+
+    cancelled = client.delete(f"/api/v1/jobs/{job_id}", headers=HEADERS)
+    assert cancelled.status_code == 204
+    assert jobs[job_id].status == "complete"
+    assert bridge_app.job_response(jobs[job_id]).files == ["sample.bin"]
+    jobs.clear()
