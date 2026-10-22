@@ -113,6 +113,7 @@ def job_response(job: Job) -> JobResponse:
 
 
 async def run_aria2(job: Job) -> None:
+    process: asyncio.subprocess.Process | None = None
     folder = job_dir(job.id)
     folder.mkdir(parents=True, exist_ok=True)
     job.status = "downloading"
@@ -151,6 +152,13 @@ async def run_aria2(job: Job) -> None:
             detail = stderr.decode("utf-8", errors="replace").strip()
             job.message = (detail[-800:] if detail else f"aria2 exited with code {process.returncode}")
     except asyncio.CancelledError:
+        if process is not None and process.returncode is None:
+            process.terminate()
+            try:
+                await asyncio.wait_for(process.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                process.kill()
+                await process.wait()
         job.status = "cancelled"
         job.message = "Cancelled"
         job.updated_at = utc_now()
