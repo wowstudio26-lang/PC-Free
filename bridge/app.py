@@ -291,6 +291,10 @@ async def cancel_job(job_id: str) -> Response:
     job = jobs.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+    # Cancellation is idempotent, but it must not hide an already-completed result or
+    # rewrite a previous failure into a cancellation.
+    if job.status not in {"queued", "downloading"}:
+        return Response(status_code=204)
     task = job_tasks.get(job_id)
     if task and not task.done():
         task.cancel()
