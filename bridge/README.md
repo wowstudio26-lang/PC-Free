@@ -9,7 +9,7 @@ This is an optional remote component for Hazel. It accepts BitTorrent magnet lin
 - The Compose file binds to `127.0.0.1:8787` by default. Do not expose port 8787 directly to the public Internet.
 - For access from a phone, deploy behind a properly configured HTTPS reverse proxy or private access gateway, with TLS and access controls. Do not use plaintext HTTP across untrusted networks.
 - Use a random token of at least 32 characters. Anyone who obtains the token can submit jobs and download files.
-- Job metadata is persisted atomically to a dedicated `/state` volume. Completed jobs and files survive a container restart. Active jobs interrupted by a restart are marked failed with a clear message; submit the magnet again to resume.
+- Job metadata is persisted atomically to a dedicated `/state` volume. Completed jobs and files survive a container restart. Queued/interrupted jobs are rescheduled into the same per-job folder; aria2 can resume partial files when its control files are intact, otherwise that transfer may restart.
 - A completed multi-file torrent exposes each file separately. There is no archive packaging in this initial version.
 
 ## Run with Docker Compose
