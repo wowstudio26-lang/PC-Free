@@ -14,7 +14,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py .
-RUN mkdir -p /downloads && chown -R bridge:bridge /downloads /app
+RUN mkdir -p /downloads /state && chown -R bridge:bridge /downloads /state /app
 USER bridge
 EXPOSE 8787
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8787"]
