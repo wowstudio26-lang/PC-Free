@@ -30,6 +30,11 @@ JOB_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     restore_jobs()
+    # Re-submit queued/interrupted jobs using the same per-job folder. aria2 can pick up
+    # intact .aria2 control files and continue partial transfers instead of losing history.
+    for job in list(jobs.values()):
+        if job.status == "queued":
+            job_tasks[job.id] = asyncio.create_task(run_aria2(job))
     yield
 
 
@@ -73,8 +78,8 @@ def restore_jobs() -> None:
                 return_code=record.get("return_code") if isinstance(record.get("return_code"), int) else None,
             )
             if job.status in {"queued", "downloading"}:
-                job.status = "failed"
-                job.message = "Bridge restarted during this transfer. Submit the magnet again to resume."
+                job.status = "queued"
+                job.message = "Bridge restarted; resuming this job from its saved folder where possible."
                 job.updated_at = utc_now()
             if job.status == "complete" and not list_files(job.id):
                 job.status = "failed"
@@ -269,7 +274,7 @@ async def get_jobs() -> list[JobResponse]:
 async def get_job(job_id: str) -> JobResponse:
     job = jobs.get(job_id)
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found (jobs are held in memory until the bridge restarts)")
+        raise HTTPException(status_code=404, detail="Job not found (unknown job ID or unavailable job metadata)")
     return job_response(job)
 
 
