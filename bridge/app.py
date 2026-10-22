@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import uuid
+from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,7 +27,13 @@ MAX_DOWNLOAD_GIB = max(1, int(os.environ.get("MAX_DOWNLOAD_GIB", "100")))
 GIB = 1024**3
 JOB_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 
-app = FastAPI(title=APP_NAME, version="0.1.0")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    restore_jobs()
+    yield
+
+
+app = FastAPI(title=APP_NAME, version="0.1.0", lifespan=lifespan)
 jobs: dict[str, "Job"] = {}
 job_tasks: dict[str, asyncio.Task] = {}
 jobs_lock = asyncio.Lock()
@@ -81,11 +88,6 @@ def restore_jobs() -> None:
         # A damaged state file must not prevent the API from starting. Preserve it for
         # inspection, but start with an empty registry rather than trusting malformed data.
         jobs.clear()
-
-
-@app.on_event("startup")
-async def load_persisted_jobs() -> None:
-    restore_jobs()
 
 
 @dataclass
