@@ -79,7 +79,7 @@ def test_completed_job_metadata_survives_registry_reload(monkeypatch, tmp_path):
     assert bridge_app.job_response(jobs[job_id]).files == ["sample.bin"]
 
 
-def test_interrupted_job_is_not_reported_as_downloading(monkeypatch, tmp_path):
+def test_interrupted_job_is_requeued_for_resume(monkeypatch, tmp_path):
     state_path = tmp_path / "state" / "jobs.json"
     monkeypatch.setattr(bridge_app, "STATE_PATH", state_path)
     monkeypatch.setattr(bridge_app, "DOWNLOAD_ROOT", tmp_path / "downloads")
@@ -99,8 +99,8 @@ def test_interrupted_job_is_not_reported_as_downloading(monkeypatch, tmp_path):
     jobs.clear()
     restore_jobs()
 
-    assert jobs[job_id].status == "failed"
-    assert "restarted" in jobs[job_id].message.lower()
+    assert jobs[job_id].status == "queued"
+    assert "resuming" in jobs[job_id].message.lower()
 
 
 
