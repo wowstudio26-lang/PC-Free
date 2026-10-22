@@ -1,0 +1,37 @@
+name: Hazel bridge tests
+
+on:
+  pull_request:
+    paths:
+      - "bridge/**"
+      - ".github/workflows/hazel-bridge-tests.yml"
+  push:
+    branches:
+      - main
+      - "feature/hazel-torrent-http-bridge"
+    paths:
+      - "bridge/**"
+      - ".github/workflows/hazel-bridge-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: bridge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: bridge/requirements-dev.txt
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Run API tests
+        run: python -m pytest -q
+      - name: Build bridge container image
+        run: docker build --tag pc-free-hazel-bridge:ci .

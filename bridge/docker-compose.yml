@@ -1,0 +1,29 @@
+services:
+  hazel-bridge:
+    build: .
+    container_name: hazel-http-bridge
+    restart: unless-stopped
+    environment:
+      BRIDGE_TOKEN: ${BRIDGE_TOKEN:?Set a long random BRIDGE_TOKEN in .env}
+      DOWNLOAD_ROOT: /downloads
+      STATE_PATH: /state/jobs.json
+      MAX_ACTIVE_JOBS: ${MAX_ACTIVE_JOBS:-2}
+      MAX_DOWNLOAD_GIB: ${MAX_DOWNLOAD_GIB:-100}
+    ports:
+      # Bind locally by default. Put behind an authenticated HTTPS reverse proxy
+      # if remote access is required; do not expose this port directly to the Internet.
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - bridge-downloads:/downloads
+      - bridge-state:/state
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  bridge-downloads:
+  bridge-state:
