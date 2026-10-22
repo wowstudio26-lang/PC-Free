@@ -6,6 +6,7 @@ services:
     environment:
       BRIDGE_TOKEN: ${BRIDGE_TOKEN:?Set a long random BRIDGE_TOKEN in .env}
       DOWNLOAD_ROOT: /downloads
+      STATE_PATH: /state/jobs.json
       MAX_ACTIVE_JOBS: ${MAX_ACTIVE_JOBS:-2}
       MAX_DOWNLOAD_GIB: ${MAX_DOWNLOAD_GIB:-100}
     ports:
@@ -14,6 +15,7 @@ services:
       - "127.0.0.1:8787:8787"
     volumes:
       - bridge-downloads:/downloads
+      - bridge-state:/state
     read_only: true
     tmpfs:
       - /tmp:size=64m
@@ -24,3 +26,4 @@ services:
 
 volumes:
   bridge-downloads:
+  bridge-state:
