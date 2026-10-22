@@ -9,7 +9,7 @@ This is an optional remote component for Hazel. It accepts BitTorrent magnet lin
 - The Compose file binds to `127.0.0.1:8787` by default. Do not expose port 8787 directly to the public Internet.
 - For access from a phone, deploy behind a properly configured HTTPS reverse proxy or private access gateway, with TLS and access controls. Do not use plaintext HTTP across untrusted networks.
 - Use a random token of at least 32 characters. Anyone who obtains the token can submit jobs and download files.
-- Job metadata is currently held in memory; restarting the bridge loses the job list, although files remain in the volume. This prototype does not claim restart-safe job recovery.
+- Job metadata is persisted atomically to a dedicated `/state` volume. Completed jobs and files survive a container restart. Active jobs interrupted by a restart are marked failed with a clear message; submit the magnet again to resume.
 - A completed multi-file torrent exposes each file separately. There is no archive packaging in this initial version.
 
 ## Run with Docker Compose
@@ -47,7 +47,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 ```
 
 Other endpoints:
-- `GET /api/v1/jobs` — list jobs in this process
+- `GET /api/v1/jobs` — list persisted jobs
 - `DELETE /api/v1/jobs/{id}` — cancel a job
 - `GET /health` — health check
 
@@ -56,7 +56,7 @@ Only `magnet:` links with a BitTorrent info hash are accepted. Arbitrary URL dow
 ## Current prototype limitations
 
 - The worker needs `aria2c` and outbound peer connectivity on the remote host.
-- Job state is in-memory and is lost on process/container restart.
+- Active peer transfers are not automatically resumed after a process restart; their saved job is marked interrupted so the user can resubmit the magnet.
 - Storage quota is a coarse guard, not a hard per-job limit.
 - HTTP API requests require a bearer token; use HTTPS when crossing networks.
-- Hazel Android UI/client integration and end-to-end device verification are separate follow-up work. Do not treat this API as already integrated into an APK.
+- Hazel Android UI/client integration is being built in its companion pull request. A passing build is not the same as an end-to-end physical-device transfer test.
