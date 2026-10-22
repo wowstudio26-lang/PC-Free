@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hmac
+import json
 import os
 import re
 import shutil
@@ -18,6 +19,7 @@ from pydantic import BaseModel, Field
 
 APP_NAME = "PC-Free Hazel HTTP Bridge"
 DOWNLOAD_ROOT = Path(os.environ.get("DOWNLOAD_ROOT", "/downloads")).resolve()
+STATE_PATH = Path(os.environ.get("STATE_PATH", "/state/jobs.json")).resolve()
 BRIDGE_TOKEN = os.environ.get("BRIDGE_TOKEN", "")
 MAX_ACTIVE_JOBS = max(1, int(os.environ.get("MAX_ACTIVE_JOBS", "2")))
 MAX_DOWNLOAD_GIB = max(1, int(os.environ.get("MAX_DOWNLOAD_GIB", "100")))
@@ -28,6 +30,62 @@ app = FastAPI(title=APP_NAME, version="0.1.0")
 jobs: dict[str, "Job"] = {}
 job_tasks: dict[str, asyncio.Task] = {}
 jobs_lock = asyncio.Lock()
+
+
+def persist_jobs() -> None:
+    """Atomically persist job metadata; downloaded payloads remain in DOWNLOAD_ROOT."""
+    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    payload = [asdict(job) for job in jobs.values()]
+    temporary = STATE_PATH.with_suffix(STATE_PATH.suffix + ".tmp")
+    temporary.write_text(json.dumps(payload, separators=(",", ":"), ensure_ascii=False), encoding="utf-8")
+    os.replace(temporary, STATE_PATH)
+
+
+def restore_jobs() -> None:
+    """Restore history and mark interrupted transfers rather than claiming they are active."""
+    if not STATE_PATH.is_file():
+        return
+    try:
+        records = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+        if not isinstance(records, list):
+            raise ValueError("state root must be a list")
+        restored: dict[str, Job] = {}
+        for record in records:
+            if not isinstance(record, dict) or not JOB_ID_RE.fullmatch(str(record.get("id", ""))):
+                continue
+            status = record.get("status")
+            if status not in {"queued", "downloading", "complete", "failed", "cancelled"}:
+                continue
+            job = Job(
+                id=record["id"],
+                magnet_uri=str(record.get("magnet_uri", "")),
+                status=status,
+                created_at=str(record.get("created_at", utc_now())),
+                updated_at=str(record.get("updated_at", utc_now())),
+                message=str(record.get("message", "")),
+                return_code=record.get("return_code") if isinstance(record.get("return_code"), int) else None,
+            )
+            if job.status in {"queued", "downloading"}:
+                job.status = "failed"
+                job.message = "Bridge restarted during this transfer. Submit the magnet again to resume."
+                job.updated_at = utc_now()
+            if job.status == "complete" and not list_files(job.id):
+                job.status = "failed"
+                job.message = "Completed payload is missing from bridge storage."
+                job.updated_at = utc_now()
+            restored[job.id] = job
+        jobs.clear()
+        jobs.update(restored)
+        persist_jobs()
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        # A damaged state file must not prevent the API from starting. Preserve it for
+        # inspection, but start with an empty registry rather than trusting malformed data.
+        jobs.clear()
+
+
+@app.on_event("startup")
+async def load_persisted_jobs() -> None:
+    restore_jobs()
 
 
 @dataclass
@@ -119,6 +177,7 @@ async def run_aria2(job: Job) -> None:
     job.status = "downloading"
     job.message = "Waiting for peers and downloading"
     job.updated_at = utc_now()
+    persist_jobs()
     # Do not enable RPC or seed after completion. A single job gets its own folder.
     command = [
         "aria2c",
@@ -147,10 +206,12 @@ async def run_aria2(job: Job) -> None:
         if process.returncode == 0 and list_files(job.id):
             job.status = "complete"
             job.message = "Download complete"
+            persist_jobs()
         else:
             job.status = "failed"
             detail = stderr.decode("utf-8", errors="replace").strip()
             job.message = (detail[-800:] if detail else f"aria2 exited with code {process.returncode}")
+            persist_jobs()
     except asyncio.CancelledError:
         if process is not None and process.returncode is None:
             process.terminate()
@@ -162,11 +223,13 @@ async def run_aria2(job: Job) -> None:
         job.status = "cancelled"
         job.message = "Cancelled"
         job.updated_at = utc_now()
+        persist_jobs()
         raise
     except Exception as exc:
         job.status = "failed"
         job.message = f"Download worker error: {type(exc).__name__}"
         job.updated_at = utc_now()
+        persist_jobs()
 
 
 @app.get("/health")
@@ -190,6 +253,7 @@ async def create_job(request: CreateJobRequest) -> JobResponse:
         now = utc_now()
         job = Job(id=job_id, magnet_uri=magnet, status="queued", created_at=now, updated_at=now)
         jobs[job_id] = job
+        persist_jobs()
         job_tasks[job_id] = asyncio.create_task(run_aria2(job))
         return job_response(job)
 
@@ -237,4 +301,5 @@ async def cancel_job(job_id: str) -> Response:
     job.status = "cancelled"
     job.message = "Cancelled by user"
     job.updated_at = utc_now()
+    persist_jobs()
     return Response(status_code=204)
