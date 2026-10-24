@@ -24,10 +24,12 @@ function Notepad({ noteId='main' }) {
   const timer = useRef(null);
   const latestValue = useRef('');
   const pendingSave = useRef(false);
+  const edited = useRef(false);
   useEffect(() => {
     let alive = true;
     getNote(noteId).then(text => {
-      if (alive) {
+      // Do not let a slow initial read overwrite text typed while the read was pending.
+      if (alive && !edited.current) {
         latestValue.current = text;
         setValue(text);
         setStatus('Saved locally');
@@ -46,13 +48,21 @@ function Notepad({ noteId='main' }) {
   const change = (next) => {
     latestValue.current = next;
     pendingSave.current = true;
+    edited.current = true;
     setValue(next);
     setStatus('Unsaved changes');
     clearTimeout(timer.current);
     timer.current = setTimeout(() => {
       pendingSave.current = false;
-      saveNote(noteId, next).then(() => setStatus('Saved locally · ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})))
-        .catch(() => setStatus('Could not save locally'));
+      saveNote(noteId, next).then(() => {
+        // A stale save completion must not change the status for newer edits.
+        if (latestValue.current === next) {
+          edited.current = false;
+          setStatus('Saved locally · ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
+        }
+      }).catch(() => {
+        if (latestValue.current === next) setStatus('Could not save locally');
+      });
     }, 300);
   };
   return <div className="notepad">
@@ -81,7 +91,15 @@ function Explorer() {
     } catch { setMessage('Unable to add file metadata.'); }
     e.target.value = '';
   };
-  const remove = async (id) => { await deleteFile(id); await refresh(); };
+  const remove = async (id) => {
+    try {
+      await deleteFile(id);
+      setMessage('Workspace entry removed.');
+      await refresh();
+    } catch {
+      setMessage('Could not remove this workspace entry.');
+    }
+  };
   return <div className="explorer">
     <div className="explorer-toolbar"><div className="crumb">⌂ <span>/</span> This device <span>/</span> Workspace</div><button className="primary-button" onClick={()=>inputRef.current?.click()}>＋ Add files</button><input ref={inputRef} hidden type="file" multiple onChange={upload} /></div>
     <div className="file-heading"><span>Name</span><span>Type</span><span>Size</span><span></span></div>
