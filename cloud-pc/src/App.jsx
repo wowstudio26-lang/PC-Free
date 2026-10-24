@@ -22,17 +22,35 @@ function Notepad({ noteId='main' }) {
   const [value, setValue] = useState('');
   const [status, setStatus] = useState('Loading local note…');
   const timer = useRef(null);
+  const latestValue = useRef('');
+  const pendingSave = useRef(false);
   useEffect(() => {
     let alive = true;
-    getNote(noteId).then(text => { if (alive) { setValue(text); setStatus('Saved locally'); } })
-      .catch(() => setStatus('Local database unavailable'));
-    return () => { alive = false; clearTimeout(timer.current); };
+    getNote(noteId).then(text => {
+      if (alive) {
+        latestValue.current = text;
+        setValue(text);
+        setStatus('Saved locally');
+      }
+    }).catch(() => { if (alive) setStatus('Local database unavailable'); });
+    return () => {
+      alive = false;
+      clearTimeout(timer.current);
+      // Flush a pending debounced edit when the user closes Notepad quickly.
+      if (pendingSave.current) {
+        pendingSave.current = false;
+        saveNote(noteId, latestValue.current).catch(() => {});
+      }
+    };
   }, [noteId]);
   const change = (next) => {
+    latestValue.current = next;
+    pendingSave.current = true;
     setValue(next);
     setStatus('Unsaved changes');
     clearTimeout(timer.current);
     timer.current = setTimeout(() => {
+      pendingSave.current = false;
       saveNote(noteId, next).then(() => setStatus('Saved locally · ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})))
         .catch(() => setStatus('Could not save locally'));
     }, 300);
