@@ -96,7 +96,7 @@ export default function App() {
   const [windows, setWindows] = useState([]);
   const [minimized, setMinimized] = useState([]);
   const [topZ, setTopZ] = useState(20);
-  const [wallpaper, setWallpaper] = useState(localStorage.getItem('cloudpc-wallpaper') || 'aurora');
+  const [wallpaper, setWallpaper] = useState(() => { try { return localStorage.getItem('cloudpc-wallpaper') || 'aurora'; } catch { return 'aurora'; } });
   const [mobile, setMobile] = useState(window.matchMedia('(max-width: 680px)').matches);
 
   useEffect(() => {
@@ -122,7 +122,7 @@ export default function App() {
   const focus = (id) => { setTopZ(z=>z+1); setWindows(list=>list.map(w=>w.id===id?{...w,z:topZ+1}:w)); };
   const minimize = (id) => setMinimized(list=>list.includes(id)?list:[...list,id]);
   const toggleMax = (id) => setWindows(list=>list.map(w=>w.id===id?{...w,maximized:!w.maximized}:w));
-  const changeWallpaper = (value) => { setWallpaper(value); localStorage.setItem('cloudpc-wallpaper', value); };
+  const changeWallpaper = (value) => { setWallpaper(value); try { localStorage.setItem('cloudpc-wallpaper', value); } catch { /* Keep the current-session choice if storage is blocked. */ } };
   const renderApp = (id) => {
     if (id==='notepad') return <Notepad />;
     if (id==='explorer') return <Explorer />;
