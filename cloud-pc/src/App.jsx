@@ -57,7 +57,6 @@ function Notepad({ noteId='main' }) {
       saveNote(noteId, next).then(() => {
         // A stale save completion must not change the status for newer edits.
         if (latestValue.current === next) {
-          edited.current = false;
           setStatus('Saved locally · ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
         }
       }).catch(() => {
