@@ -25,8 +25,8 @@ export default function Window({
       } else if (resize.current) {
         const r = resize.current;
         setSize({
-          width: clamp(r.width + e.clientX - r.x, 280, window.innerWidth - pos.x),
-          height: clamp(r.height + e.clientY - r.y, 180, window.innerHeight - pos.y - 56)
+          width: clamp(r.width + e.clientX - r.x, Math.min(280, window.innerWidth - pos.x), window.innerWidth - pos.x),
+          height: clamp(r.height + e.clientY - r.y, Math.min(180, window.innerHeight - pos.y - 56), window.innerHeight - pos.y - 56)
         });
       }
     };
@@ -66,7 +66,7 @@ export default function Window({
     <section
       ref={windowRef}
       className={'app-window ' + (isMaximized ? 'maximized ' : '') + (mobileFullscreen ? 'mobile-fullscreen ' : '') + (interacting ? 'interacting' : '')}
-      style={{ left:isMaximized || mobileFullscreen ? 0 : pos.x, top:isMaximized || mobileFullscreen ? 0 : pos.y, width:isMaximized || mobileFullscreen ? '100%' : size.width, height:isMaximized || mobileFullscreen ? 'calc(100% - 56px)' : size.height, zIndex }}
+      style={{ left:isMaximized || mobileFullscreen ? 0 : pos.x, top:isMaximized || mobileFullscreen ? 0 : pos.y, width:isMaximized || mobileFullscreen ? '100%' : size.width, height:isMaximized || mobileFullscreen ? 'calc(100% - 56px)' : size.height, minWidth:isMaximized || mobileFullscreen ? 0 : Math.min(280, window.innerWidth - pos.x), minHeight:isMaximized || mobileFullscreen ? 0 : Math.min(180, window.innerHeight - pos.y - 56), zIndex }}
       onPointerDown={() => onFocus?.(id)}
       aria-label={title}
     >
